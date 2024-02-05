@@ -19,6 +19,21 @@ def binary_cross_entropy(y_true, y_pred):
     return loss
 
 
+def mean_squared_error(y_true, y_pred):
+    loss = np.mean((y_true - y_pred) ** 2)
+    return loss
+
+
+def cost_function(y_true, y_pred, function='BCE'):
+    if function == 'BCE':
+        loss = binary_cross_entropy(y_true, y_pred)
+    elif function == 'MSE':
+        loss = mean_squared_error(y_true, y_pred)
+    else:
+        raise Exception('Please identify a cost function!')
+    return loss
+
+
 def add_bias(X):
     # Add a column of ones to the input X
     ones = np.ones((X.shape[0], 1))
@@ -30,7 +45,8 @@ PARAMS = {
     'batch_size': 10,
     'learning_rate': 0.01,
     'num_hidden_layers': 100,
-    'early_stopping': False
+    'early_stopping': False,
+    'cost_function': 'MSE'  # cost_function: BCE(Binary Cross Entropy) / MSE(Mean Squared Error)
 }
 
 
@@ -60,9 +76,15 @@ class MLP:
         self.a2 = sigmoid(self.z2)
         return self.a2
 
-    def _backward(self, Y):
-        grad_v = np.dot((self.a2 - Y.reshape(-1, 1)).T, self.a1_with_bias)
-        grad_w = np.dot(self.a2 - Y.reshape(-1, 1), self.v.T)
+    def _backward(self, Y, cost_function):
+        if cost_function == 'BCE':
+            derivative_output = self.a2 - Y.reshape(-1, 1)
+        elif cost_function == 'MSE':
+            derivative_output = 2 * self.a2 - 2 * Y.reshape(-1, 1)
+        else:
+            raise Exception('Please identify cost function!')
+        grad_v = np.dot(derivative_output.T, self.a1_with_bias)
+        grad_w = np.dot(derivative_output, self.v.T)
         grad_w = grad_w * derivative_sigmoid(self.a1_with_bias)
         grad_w = np.dot(grad_w[:, :-1].T, self.X)  # Exclude gradient for the bias for the next layer
 
@@ -70,8 +92,8 @@ class MLP:
         self.w -= self.params['learning_rate'] * grad_w.T
 
     def train(self, X_train, Y_train, X_valid, Y_valid, fig_name):
-        train_losses = []  # To store training loss per epoch
-        val_losses = []  # To store validation loss per epoch
+        train_losses = []
+        val_losses = []
         if self.params['early_stopping']:
             best_loss = float('inf')
             patience_counter = 0
@@ -86,9 +108,9 @@ class MLP:
                 X_train_batch = X_train[start_idx:end_idx]
                 Y_train_batch = Y_train[start_idx:end_idx]
                 output = self._forward(X_train_batch)
-                batch_train_loss = binary_cross_entropy(Y_train_batch, np.squeeze(output))
+                batch_train_loss = cost_function(Y_train_batch, np.squeeze(output), function=self.params['cost_function'])
                 epoch_train_loss += batch_train_loss
-                self._backward(Y_train_batch)
+                self._backward(Y_train_batch, cost_function=self.params['cost_function'])
             # print(f"----------------------Epoch {i + 1}----------------------")
             # print(f"Training loss: {epoch_train_loss / total_batches}")
             train_losses.append(epoch_train_loss / total_batches)
@@ -107,16 +129,17 @@ class MLP:
                     if patience_counter >= patience:
                         print(f"Epoch {i}: Stopping early due to no improvement in validation loss.")
                         break
+
         # Plotting the training and validation loss
-        plt.figure(figsize=(10, 6))
-        plt.plot(train_losses, label='Training Loss')
-        plt.plot(val_losses, label='Validation Loss')
-        plt.title('Training and Validation Losses')
-        plt.xlabel('Epoch')
-        plt.ylabel('Loss')
-        plt.legend()
-        # plt.savefig(fig_name, dpi=300, bbox_inches='tight')
-        plt.show()
+        # plt.figure(figsize=(10, 6))
+        # plt.plot(train_losses, label='Training Loss')
+        # plt.plot(val_losses, label='Validation Loss')
+        # plt.title('Training and Validation Losses')
+        # plt.xlabel('Epoch')
+        # plt.ylabel('Loss')
+        # plt.legend()
+        # # plt.savefig(fig_name, dpi=300, bbox_inches='tight')
+        # plt.show()
 
     def valid(self, X, Y):
         output = self._forward(X)
@@ -181,7 +204,7 @@ if __name__ == '__main__':
     mlp = MLP(input_size=X_train.shape, params=PARAMS)
     mlp.train(X_train, Y_train, X_valid, Y_valid, train_path.split('.')[0]+'_training_validation_loss_curve.jpg')
     mlp.test(X_test, Y_test)
-    mlp.plot_decision_surface(X_test, Y_test, train_path.split('.')[0]+'_decision_boundary.jpg')
+    # mlp.plot_decision_surface(X_test, Y_test, train_path.split('.')[0]+'_decision_boundary.jpg')
     # mlp.plot()
     # experiment with different params
     # epoch = [50, 100]
@@ -192,7 +215,7 @@ if __name__ == '__main__':
     # param_combinations = list(itertools.product(epoch, batch_size, learning_rate, num_hidden_layers, early_stopping))
     # grid_search_data = []
     # for combo in param_combinations:
-    #     keys = ['epoch', 'batch_size', 'learning_rate', 'num_hidden_layers', 'early_stopping']
+    #     keys = ['epoch', 'batch_size', 'learning_rate', 'num_hidden_layers', 'early_stopping', 'cost_function']
     #     params = dict(zip(keys, combo))
     #     print (params)
     #     mlp = MLP(input_size=X_train.shape, params=params)
